@@ -9,9 +9,9 @@ import asyncio
 app = Flask(__name__)
 
 # ⚠️ توکن خود را اینجا بگذارید
-TOKEN = "توکن_ربات_خود_را_اینجا_بگذارید" 
+TOKEN = "9076981892:AAGdpFZbM-TEitkRX9Sh1vUWSbLnCMdH-Z0"
 # ⚠️ لینک Render خود را اینجا بگذارید
-WEB_APP_URL = "https://asadi-miniapp.onrender.com" 
+WEB_APP_URL = "https://asadi-miniapp-1.onrender.com/"
 
 def init_db():
     conn = sqlite3.connect('database.db')
