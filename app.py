@@ -12,8 +12,7 @@ app = Flask(__name__)
 # ⚠️ توکن خود را اینجا بگذارید
 TOKEN = "9076981892:AAGdpFZbM-TEitkRX9Sh1vUWSbLnCMdH-Z0" 
 # ⚠️ بعد از ساخت در Render، لینک را اینجا بگذارید
-WEB_APP_URL = "https://your-app.onrender.com" 
-
+WEB_APP_URL = "https://asadi-miniapp.onrender.com/"
 def init_db():
     conn = sqlite3.connect('database.db')
     c = conn.cursor()
