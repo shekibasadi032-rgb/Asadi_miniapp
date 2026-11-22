@@ -1,26 +1,30 @@
 import os
 import sqlite3
-from datetime import datetime
 from flask import Flask, render_template, request, jsonify
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, ContextTypes
-import asyncio
 
 app = Flask(__name__)
 
-# ⚠️ توکن خود را اینجا بگذارید
-TOKEN = "9076981892:AAGdpFZbM-TEitkRX9Sh1vUWSbLnCMdH-Z0"
-# ⚠️ لینک Render خود را اینجا بگذارید
-WEB_APP_URL = "https://asadi-miniapp-1.onrender.com/"
+# ⚠️ تنظیمات خود را اینجا وارد کنید
+TOKEN = "9076981892:AAGdpFZbM-TEitkRX9Sh1vUWSbLnCMdH-Z0" 
+WEB_APP_URL = "https://asadi-miniapp-1.onrender.com" 
+
+# ⚠️ آیدی عددی تلگرام شما (مدیر)
+ADMIN_ID = 8992677752  
 
 def init_db():
     conn = sqlite3.connect('database.db')
     c = conn.cursor()
-    c.execute("""CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, phone TEXT)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY, 
+        fullname TEXT, 
+        phone TEXT, 
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )""")
     conn.commit()
     conn.close()
 
-# وب‌سرور برای نمایش فرم
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -30,35 +34,59 @@ def register():
     data = request.json
     conn = sqlite3.connect('database.db')
     c = conn.cursor()
-    c.execute("INSERT INTO users (name, phone) VALUES (?, ?)", (data['name'], data['phone']))
-    conn.commit()
-    conn.close()
-    return jsonify({"status": "ok"})
+    try:
+        c.execute("INSERT OR REPLACE INTO users (user_id, fullname, phone) VALUES (?, ?, ?)", 
+                  (data['user_id'], data['fullname'], data['phone']))
+        conn.commit()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        conn.close()
 
-# تنظیمات ربات تلگرام
+# --- بخش ربات تلگرام ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton("🚀 ورود به فرم", web_app=WebAppInfo(url=WEB_APP_URL))]]
-    await update.message.reply_text("برای ثبت‌نام روی دکمه زیر بزنید:", reply_markup=InlineKeyboardMarkup(keyboard))
+    keyboard = [[InlineKeyboardButton("🚀 ورود به فرم ثبت‌نام", web_app=WebAppInfo(url=WEB_APP_URL))]]
+    await update.message.reply_text("سلام! برای ساخت حساب کاربری در اسدی کلکشن روی دکمه زیر بزنید:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-def run_async(coro):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(coro)
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("⛔ شما دسترسی به این بخش ندارید.")
+        return
+    
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute("SELECT fullname, phone, user_id FROM users ORDER BY created_at DESC")
+    users = c.fetchall()
+    conn.close()
 
-@app.route(f"/webhook/{TOKEN}", methods=['POST'])
-def telegram_webhook():
+    if not users:
+        await update.message.reply_text("📭 هنوز هیچ کاربری ثبت‌نام نکرده است.")
+        return
+
+    text = "📊 **لیست کاربران ثبت‌نام شده:**\n\n"
+    for i, u in enumerate(users, 1):
+        text += f"{i}. 👤 {u[0]}\n📞 {u[1]}\n🆔 {u[2]}\n➖➖➖➖➖➖\n"
+    
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+@app.route(f'/webhook/{TOKEN}', methods=['POST'])
+def webhook():
     try:
         application = Application.builder().token(TOKEN).build()
         application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("admin", admin_panel)) # دستور مخفی ادمین
         
         update = Update.de_json(request.get_json(force=True), application.bot)
         
-        async def process():
-            await application.initialize()
-            await application.process_update(update)
-            await application.shutdown()
-            
-        run_async(process())
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(application.initialize())
+        loop.run_until_complete(application.process_update(update))
+        loop.run_until_complete(application.shutdown())
+        
         return "ok", 200
     except Exception as e:
         print(f"Error: {e}")
@@ -66,14 +94,14 @@ def telegram_webhook():
 
 @app.route('/set_webhook')
 def set_webhook():
-    import urllib.request
-    webhook_url = f"https://asadi-miniapp.onrender.com/webhook/{TOKEN}"
+    import requests
+    webhook_url = f"https://asadi-miniapp-1.onrender.com/webhook/{TOKEN}"
     url = f"https://api.telegram.org/bot{TOKEN}/setWebhook?url={webhook_url}"
     try:
-        with urllib.request.urlopen(url) as response:
-            return response.read().decode()
+        response = requests.get(url)
+        return response.json()
     except Exception as e:
-        return str(e)
+        return {"status": "error", "message": str(e)}
 
 if __name__ == '__main__':
     init_db()
