@@ -20,6 +20,7 @@ def init_db():
     conn.commit()
     conn.close()
 
+# وب‌سرور برای نمایش فرم
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -34,28 +35,45 @@ def register():
     conn.close()
     return jsonify({"status": "ok"})
 
+# تنظیمات ربات تلگرام
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("🚀 ورود به فرم", web_app=WebAppInfo(url=WEB_APP_URL))]]
     await update.message.reply_text("برای ثبت‌نام روی دکمه زیر بزنید:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# این تابع وب‌هوک را تنظیم می‌کند تا ربات و سایت همزمان بدون مشکل کار کنند
-@app.route(f"/{TOKEN}", methods=['POST'])
-async def telegram_webhook():
-    application = Application.builder().token(TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    await application.initialize()
-    await application.process_update(update)
-    return "ok"
+def run_async(coro):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(coro)
+
+@app.route(f"/webhook/{TOKEN}", methods=['POST'])
+def telegram_webhook():
+    try:
+        application = Application.builder().token(TOKEN).build()
+        application.add_handler(CommandHandler("start", start))
+        
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        
+        async def process():
+            await application.initialize()
+            await application.process_update(update)
+            await application.shutdown()
+            
+        run_async(process())
+        return "ok", 200
+    except Exception as e:
+        print(f"Error: {e}")
+        return "error", 500
 
 @app.route('/set_webhook')
 def set_webhook():
-    # این آدرس را یک بار در مرورگر باز کنید تا ربات به سرور متصل شود
-    import requests
-    webhook_url = f"https://asadi-miniapp.onrender.com/{TOKEN}"
-    response = requests.get(f"https://api.telegram.org/bot{TOKEN}/setWebhook?url={webhook_url}")
-    return response.json()
+    import urllib.request
+    webhook_url = f"https://asadi-miniapp.onrender.com/webhook/{TOKEN}"
+    url = f"https://api.telegram.org/bot{TOKEN}/setWebhook?url={webhook_url}"
+    try:
+        with urllib.request.urlopen(url) as response:
+            return response.read().decode()
+    except Exception as e:
+        return str(e)
 
 if __name__ == '__main__':
     init_db()
